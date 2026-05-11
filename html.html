@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>社用車予約システム</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F4F3EF; --surface: #FFFFFF; --surface2: #F0EFE9;
+    --accent: #1A3C5E; --accent2: #2E6DA4;
+    --green: #1B6B3A; --green-bg: #E8F5EE;
+    --red: #B03A2E; --red-bg: #FDECEA;
+    --amber: #7A4F1A; --amber-bg: #FDF3E3;
+    --purple: #5B2D8E; --purple-bg: #F0E8FA;
+    --border: #D9D7CF; --text: #1C1B18; --text2: #5C5A52; --text3: #9B9890;
+    --radius: 10px; --shadow: 0 1px 4px rgba(0,0,0,0.08); --shadow-lg: 0 4px 20px rgba(0,0,0,0.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.6; }
+
+  header { background: var(--accent); color: #fff; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+  header h1 { font-size: 16px; font-weight: 500; letter-spacing: 0.04em; display: flex; align-items: center; gap: 8px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #4CAF50; }
+  .status-dot.offline { background: #f44336; }
+  .status-label { font-size: 11px; color: rgba(255,255,255,0.7); }
+
+  .layout { max-width: 980px; margin: 0 auto; padding: 24px 16px; display: grid; grid-template-columns: 1fr 360px; gap: 20px; }
+  @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+
+  .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; }
+  .card-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: 0.04em; text-transform: uppercase; }
+  .card-body { padding: 20px; }
+
+  .cal-nav { display: flex; align-items: center; gap: 8px; }
+  .cal-month { font-size: 18px; font-weight: 700; }
+  .cal-nav button { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; width: 32px; height: 32px; cursor: pointer; font-size: 16px; color: var(--text); display: flex; align-items: center; justify-content: center; transition: background 0.15s; }
+  .cal-nav button:hover { background: var(--border); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-dow { text-align: center; font-size: 11px; font-weight: 700; color: var(--text3); padding: 4px 0 8px; }
+  .cal-dow:first-child { color: #c0392b; }
+  .cal-dow:last-child { color: var(--accent2); }
+  /* ①終日対応：セル高さを少し広げる */
+  .cal-day { border-radius: 8px; padding: 6px 4px 6px; min-height: 88px; border: 1px solid transparent; cursor: pointer; transition: all 0.15s; background: var(--surface2); }
+  .cal-day:hover:not(.cal-day-empty):not(.cal-day-past) { border-color: var(--accent2); background: #EAF3FB; }
+  .cal-day.cal-day-empty { background: transparent; border: none; cursor: default; }
+  .cal-day.cal-day-past { opacity: 0.38; cursor: not-allowed; }
+  .cal-day.cal-day-today { border-color: var(--accent); background: #E8EFF6; }
+  .cal-day.cal-day-selected { border-color: var(--accent2); background: #D0E8F8; box-shadow: 0 0 0 2px var(--accent2); }
+  .cal-dn { font-size: 12px; font-weight: 500; color: var(--text); display: block; text-align: right; margin-bottom: 4px; }
+  .cal-day.sun .cal-dn { color: #c0392b; }
+  .cal-day.sat .cal-dn { color: var(--accent2); }
+  .cal-day.cal-day-today .cal-dn { background: var(--accent); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; float: right; font-size: 11px; }
+  .slot-pill { display: block; border-radius: 4px; font-size: 10px; padding: 2px 4px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+  .slot-am.booked  { background: var(--amber-bg); color: var(--amber); }
+  .slot-pm.booked  { background: #DCF0FF; color: #1A4A7A; }
+  .slot-all.booked { background: #F0E8FA; color: #5B2D8E; }
+  .slot-free       { background: var(--green-bg); color: var(--green); }
+
+  .form-row { margin-bottom: 16px; }
+  label { display: block; font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 6px; letter-spacing: 0.03em; }
+  input[type="text"], select, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; color: var(--text); background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s; outline: none; -webkit-appearance: none; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent2); box-shadow: 0 0 0 3px rgba(46,109,164,0.12); }
+  textarea { resize: vertical; min-height: 64px; }
+
+  /* ①時間帯ボタン3列 */
+  .slot-selector { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .slot-btn { border: 2px solid var(--border); background: var(--surface); border-radius: 8px; padding: 10px 6px; text-align: center; cursor: pointer; transition: all 0.15s; font-family: 'Noto Sans JP', sans-serif; }
+  .slot-btn:hover:not(:disabled) { border-color: var(--accent2); background: #EAF3FB; }
+  .slot-btn.selected { border-color: var(--accent2); background: #D0E8F8; }
+  .slot-btn.selected-all { border-color: var(--purple); background: var(--purple-bg); }
+  .slot-btn:disabled { opacity: 0.4; cursor: not-allowed; background: var(--surface2); }
+  .slot-btn .slot-time { font-size: 10px; color: var(--text3); display: block; margin-top: 2px; font-family: 'DM Mono', monospace; }
+  .slot-btn .slot-label { font-size: 13px; font-weight: 700; color: var(--accent); }
+  .slot-btn.selected .slot-label, .slot-btn.selected-all .slot-label { color: var(--accent2); }
+
+  .btn-primary { width: 100%; padding: 13px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-family: 'Noto Sans JP', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; letter-spacing: 0.04em; transition: background 0.15s, transform 0.1s; }
+  .btn-primary:hover { background: #153355; }
+  .btn-primary:active { transform: scale(0.99); }
+  .btn-primary:disabled { background: var(--border); cursor: not-allowed; }
+
+  .selected-date-display { background: var(--surface2); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+  .selected-date-display .date-text { font-size: 16px; font-weight: 700; color: var(--accent); }
+  .selected-date-display .date-hint { font-size: 11px; color: var(--text3); }
+
+  .reservation-list { display: flex; flex-direction: column; gap: 10px; }
+  .reservation-item { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 12px; background: var(--surface); transition: box-shadow 0.15s; }
+  .reservation-item:hover { box-shadow: var(--shadow-lg); }
+  .res-slot-badge { border-radius: 6px; padding: 4px 6px; font-size: 11px; font-weight: 700; min-width: 42px; text-align: center; flex-shrink: 0; font-family: 'DM Mono', monospace; }
+  .badge-am  { background: var(--amber-bg); color: var(--amber); }
+  .badge-pm  { background: #D4EAF7; color: #1A4A7A; }
+  .badge-all { background: var(--purple-bg); color: var(--purple); }
+  .res-info { flex: 1; min-width: 0; }
+  .res-date { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; }
+  .res-name { font-size: 14px; font-weight: 700; color: var(--text); }
+  .res-sub  { font-size: 12px; color: var(--text2); }
+  .res-note { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  /* ③会社バッジ */
+  .co-badge { display: inline-block; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 700; margin-left: 6px; }
+  .co-gomei   { background: #FFF3E0; color: #E65100; }
+  .co-kabushi { background: #E3F2FD; color: #1565C0; }
+  .btn-cancel { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--red); cursor: pointer; font-family: 'Noto Sans JP', sans-serif; transition: all 0.15s; flex-shrink: 0; }
+  .btn-cancel:hover { background: var(--red-bg); border-color: var(--red); }
+
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--accent); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 500; box-shadow: 0 4px 20px rgba(0,0,0,0.2); transition: transform 0.3s cubic-bezier(.4,0,.2,1); z-index: 999; white-space: nowrap; }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.error { background: var(--red); }
+  #toast.success { background: var(--green); }
+
+  .empty-state { text-align: center; padding: 32px 16px; color: var(--text3); }
+  .empty-state .icon { font-size: 32px; margin-bottom: 8px; }
+
+  .rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .rule-chip { background: var(--surface2); border-radius: 8px; padding: 8px 10px; font-size: 11px; color: var(--text2); }
+  .rule-chip strong { display: block; color: var(--accent); font-size: 12px; margin-bottom: 2px; }
+
+  .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .tab-btn { flex: 1; padding: 12px; background: none; border: none; border-bottom: 2px solid transparent; font-family: 'Noto Sans JP', sans-serif; font-size: 13px; font-weight: 500; color: var(--text3); cursor: pointer; transition: all 0.15s; margin-bottom: -1px; }
+  .tab-btn.active { color: var(--accent2); border-bottom-color: var(--accent2); font-weight: 700; }
+  .tab-pane { display: none; padding: 16px 20px; }
+  .tab-pane.active { display: block; }
+
+  .filter-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; cursor: pointer; transition: all 0.15s; font-family: 'Noto Sans JP', sans-serif; color: var(--text2); }
+  .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .section-title { font-size: 13px; font-weight: 700; color: var(--text2); margin-bottom: 10px; letter-spacing: 0.04em; }
+
+  /* ③会社選択ボタン */
+  .co-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .co-btn { border: 2px solid var(--border); background: var(--surface); border-radius: 8px; padding: 12px 8px; text-align: center; cursor: pointer; transition: all 0.15s; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 700; color: var(--accent); }
+  .co-btn:hover { border-color: var(--accent2); background: #EAF3FB; }
+  .co-btn.selected-gomei   { border-color: #E65100; background: #FFF3E0; color: #E65100; }
+  .co-btn.selected-kabushi { border-color: #1565C0; background: #E3F2FD; color: #1565C0; }
+
+  .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; gap: 12px; }
+  .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent2); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 14px; color: var(--text2); }
+  .loading-overlay.hidden { display: none; }
+  .mileage-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">データを読み込み中...</div>
+</div>
+
+<header>
+  <h1>🚗 社用車予約システム</h1>
+  <div class="header-right">
+    <div class="status-dot" id="status-dot"></div>
+    <span class="status-label" id="status-label">接続中...</span>
+    <button onclick="loadAll()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;font-family:'Noto Sans JP',sans-serif;">🔄 更新</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- 左カラム -->
+  <div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <span class="card-title">📅 予約カレンダー</span>
+        <div class="cal-nav">
+          <button onclick="changeMonth(-1)">‹</button>
+          <span class="cal-month" id="cal-month-label"></span>
+          <button onclick="changeMonth(1)">›</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:16px">
+        <div class="cal-grid">
+          <div class="cal-dow">日</div><div class="cal-dow">月</div><div class="cal-dow">火</div>
+          <div class="cal-dow">水</div><div class="cal-dow">木</div><div class="cal-dow">金</div><div class="cal-dow">土</div>
+        </div>
+        <div class="cal-grid" id="cal-body"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('list',this)">📋 予約一覧</button>
+        <button class="tab-btn" onclick="switchTab('mileage',this)">🔢 走行距離</button>
+        <button class="tab-btn" onclick="switchTab('export',this)">📤 出力</button>
+      </div>
+
+      <!-- 予約一覧タブ -->
+      <div class="tab-pane active" id="tab-list">
+        <div class="filter-row">
+          <button class="filter-btn active" onclick="setFilter('upcoming',this)">今後の予約</button>
+          <button class="filter-btn" onclick="setFilter('all',this)">すべて</button>
+          <button class="filter-btn" onclick="setFilter('past',this)">過去の予約</button>
+        </div>
+        <div id="reservation-list" class="reservation-list"></div>
+      </div>
+
+      <!-- 走行距離タブ（③予約選択を削除・会社選択を追加） -->
+      <div class="tab-pane" id="tab-mileage">
+        <p class="section-title">走行距離の記録</p>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="form-row">
+            <label>氏名</label>
+            <input type="text" id="ml-name" placeholder="山田 太郎">
+          </div>
+          <div class="form-row">
+            <label>利用日</label>
+            <input type="text" id="ml-date" placeholder="例: 2025-05-07">
+          </div>
+          <!-- ③会社選択 -->
+          <div class="form-row">
+            <label>利用会社 *</label>
+            <div class="co-selector">
+              <button class="co-btn" id="ml-btn-gomei" onclick="selectMlCo('gomei')">合名会社</button>
+              <button class="co-btn" id="ml-btn-kabushi" onclick="selectMlCo('kabushi')">株式会社</button>
+            </div>
+          </div>
+          <div class="mileage-row">
+            <div><label>出発時メーター (km)</label><input type="text" id="mileage-start" placeholder="例: 12345" inputmode="numeric"></div>
+            <div><label>帰着時メーター (km)</label><input type="text" id="mileage-end" placeholder="例: 12567" inputmode="numeric"></div>
+          </div>
+          <div id="mileage-diff-row" style="display:none;background:var(--green-bg);border-radius:8px;padding:10px 14px;justify-content:space-between;align-items:center">
+            <span style="font-size:11px;color:var(--text3)">走行距離</span>
+            <span style="font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--green)"><span id="mileage-diff-val"></span> km</span>
+          </div>
+          <button class="btn-primary" onclick="saveMileage()">走行距離を保存</button>
+        </div>
+        <div style="margin-top:20px">
+          <p class="section-title">走行距離記録一覧</p>
+          <div id="mileage-list"></div>
+        </div>
+      </div>
+
+      <!-- 出力タブ（④合名・株式別に出力） -->
+      <div class="tab-pane" id="tab-export">
+        <p class="section-title">データ出力</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <button class="btn-primary" onclick="exportCSV('all')"    style="background:var(--accent)">📥 予約データ CSV（全件）</button>
+          <div style="height:1px;background:var(--border);margin:4px 0"></div>
+          <button class="btn-primary" onclick="exportMileageCSV('all')"    style="background:#555">📥 走行距離 CSV（全件）</button>
+          <button class="btn-primary" onclick="exportMileageCSV('gomei')"  style="background:#E65100">📥 走行距離 CSV（合名会社のみ）</button>
+          <button class="btn-primary" onclick="exportMileageCSV('kabushi')" style="background:#1565C0">📥 走行距離 CSV（株式会社のみ）</button>
+        </div>
+        <div style="margin-top:16px;background:var(--surface2);border-radius:8px;padding:12px;font-size:12px;color:var(--text2)">
+          データはGoogleスプレッドシートにリアルタイム保存されています。全社員が同じデータを共有しています。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右カラム：フォーム -->
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><span class="card-title">📋 予約ルール</span></div>
+      <div class="card-body" style="padding:14px 16px">
+        <div class="rules-grid">
+          <div class="rule-chip"><strong>申請期限</strong>当日でも申請可</div>
+          <div class="rule-chip"><strong>時間単位</strong>午前／午後／終日</div>
+          <div class="rule-chip"><strong>承認フロー</strong>承認不要・先着順</div>
+          <div class="rule-chip"><strong>キャンセル</strong>前日まで</div>
+          <div class="rule-chip"><strong>優先順位</strong>完全予約順</div>
+          <div class="rule-chip"><strong>鍵の受渡し</strong>総務部窓口</div>
+        </div>
+        <div style="background:var(--amber-bg);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--amber)">
+          ⚠️ 出発時・帰着時に備え付けファイルへ走行距離を記録してください。
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">✏️ 新規予約</span></div>
+      <div class="card-body">
+        <div class="selected-date-display">
+          <span style="font-size:20px">📆</span>
+          <div>
+            <div class="date-text" id="form-date-display">日付を選択してください</div>
+            <div class="date-hint">カレンダーから日付をクリック</div>
+          </div>
+        </div>
+
+        <!-- ①時間帯：午前・午後・終日の3ボタン -->
+        <div class="form-row">
+          <label>時間帯 *</label>
+          <div class="slot-selector">
+            <button class="slot-btn" id="btn-am"  onclick="selectSlot('am')"  disabled>
+              <span class="slot-label">午前</span>
+              <span class="slot-time">09:00–12:30</span>
+            </button>
+            <button class="slot-btn" id="btn-pm"  onclick="selectSlot('pm')"  disabled>
+              <span class="slot-label">午後</span>
+              <span class="slot-time">13:00–17:30</span>
+            </button>
+            <button class="slot-btn" id="btn-all" onclick="selectSlot('all')" disabled>
+              <span class="slot-label">終日</span>
+              <span class="slot-time">09:00–17:30</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>氏名 *</label>
+          <input type="text" id="input-name" placeholder="山田 太郎">
+        </div>
+        <div class="form-row">
+          <label>部署</label>
+          <input type="text" id="input-dept" placeholder="営業部">
+        </div>
+        <!-- ②利用目的は削除 -->
+        <div class="form-row">
+          <label>行先</label>
+          <input type="text" id="input-dest" placeholder="例：四日市市 ○○町">
+        </div>
+        <div class="form-row">
+          <label>備考</label>
+          <textarea id="input-note" placeholder="その他・特記事項があれば"></textarea>
+        </div>
+
+        <button class="btn-primary" id="btn-reserve" onclick="submitReservation()" disabled>予約を確定する</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwnDup5x88r89zVHxnKws0DNCOHRU1nMZ3WpoOOVYucL-RC_kp1sFM69xL5-QUdJQkN/exec';
+
+let reservations = [], mileageRecords = [];
+let currentYear, currentMonth;
+let selectedDate = null, selectedSlot = null, listFilter = 'upcoming';
+let selectedMlCo = null; // ③走行距離タブの会社選択
+
+// ===== API（JSONP方式でCORSを回避） =====
+function apiGet(action) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'cb_' + Date.now();
+    const script = document.createElement('script');
+    window[cbName] = (data) => { resolve(data); delete window[cbName]; script.remove(); };
+    script.onerror = () => { reject(new Error('通信エラー')); delete window[cbName]; script.remove(); };
+    script.src = GAS_URL + '?action=' + action + '&callback=' + cbName;
+    document.head.appendChild(script);
+  });
+}
+function apiPost(action, payload) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'cb_' + Date.now();
+    const script = document.createElement('script');
+    window[cbName] = (data) => { resolve(data); delete window[cbName]; script.remove(); };
+    script.onerror = () => { reject(new Error('通信エラー')); delete window[cbName]; script.remove(); };
+    const encoded = encodeURIComponent(JSON.stringify({action, payload}));
+    script.src = GAS_URL + '?jsonp=' + encoded + '&callback=' + cbName;
+    document.head.appendChild(script);
+  });
+}
+
+// ===== 初期化 =====
+async function loadAll() {
+  showLoading(true);
+  try {
+    const [resData, mlData] = await Promise.all([apiGet('getReservations'), apiGet('getMileage')]);
+    if (resData.error) throw new Error(resData.error);
+    reservations = (resData.reservations || []).map(r => ({
+      ...r,
+      date: r.date ? String(r.date).substring(0, 10) : '',
+      slot: r.slot ? String(r.slot).trim() : ''
+    }));
+    mileageRecords = mlData.mileage || [];
+    setStatus(true);
+    renderCalendar();
+    renderReservationList();
+    renderMileageList();
+    if (selectedDate) selectDate(selectedDate);
+  } catch(e) {
+    setStatus(false);
+    showToast('データの読み込みに失敗しました', 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+function showLoading(f) { document.getElementById('loading').classList.toggle('hidden', !f); }
+function setStatus(ok) {
+  document.getElementById('status-dot').className = 'status-dot' + (ok ? '' : ' offline');
+  document.getElementById('status-label').textContent = ok ? 'Googleシート連携中' : 'オフライン';
+}
+
+function init() {
+  const t = new Date();
+  currentYear = t.getFullYear(); currentMonth = t.getMonth();
+  loadAll();
+  document.getElementById('mileage-start').addEventListener('input', updateMileageDiff);
+  document.getElementById('mileage-end').addEventListener('input', updateMileageDiff);
+}
+
+// ===== カレンダー =====
+function changeMonth(d) {
+  currentMonth += d;
+  if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+  if (currentMonth < 0)  { currentMonth = 11; currentYear--; }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  document.getElementById('cal-month-label').textContent = `${currentYear}年 ${currentMonth + 1}月`;
+  const body = document.getElementById('cal-body');
+  body.innerHTML = '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const first = new Date(currentYear, currentMonth, 1);
+  const last  = new Date(currentYear, currentMonth + 1, 0);
+
+  for (let i = 0; i < first.getDay(); i++) {
+    const e = document.createElement('div');
+    e.className = 'cal-day cal-day-empty';
+    body.appendChild(e);
+  }
+
+  for (let d = 1; d <= last.getDate(); d++) {
+    const dt = new Date(currentYear, currentMonth, d);
+    const dateStr = toDateStr(dt);
+    const dow = dt.getDay();
+    const isPast = dt < today;
+    const isToday = dt.getTime() === today.getTime();
+
+    const cell = document.createElement('div');
+    let cls = 'cal-day';
+    if (dow === 0) cls += ' sun';
+    if (dow === 6) cls += ' sat';
+    if (isPast) cls += ' cal-day-past';
+    if (isToday) cls += ' cal-day-today';
+    if (selectedDate === dateStr) cls += ' cal-day-selected';
+    cell.className = cls;
+    if (!isPast) cell.onclick = () => selectDate(dateStr);
+
+    const dn = document.createElement('span');
+    dn.className = 'cal-dn';
+    dn.textContent = d;
+    cell.appendChild(dn);
+
+    // ①終日があれば1行、なければ午前・午後それぞれ表示
+    const allRes = getReservation(dateStr, 'all');
+    const amRes  = getReservation(dateStr, 'am');
+    const pmRes  = getReservation(dateStr, 'pm');
+
+    if (allRes) {
+      const pill = document.createElement('span');
+      pill.className = 'slot-pill slot-all booked';
+      pill.textContent = '終日 ' + allRes.name;
+      cell.appendChild(pill);
+    } else {
+      const amPill = document.createElement('span');
+      amPill.className = 'slot-pill slot-am ' + (amRes ? 'booked' : 'slot-free');
+      amPill.textContent = amRes ? ('午前 ' + amRes.name) : '午前 空き';
+      cell.appendChild(amPill);
+
+      const pmPill = document.createElement('span');
+      pmPill.className = 'slot-pill slot-pm ' + (pmRes ? 'booked' : 'slot-free');
+      pmPill.textContent = pmRes ? ('午後 ' + pmRes.name) : '午後 空き';
+      cell.appendChild(pmPill);
+    }
+
+    body.appendChild(cell);
+  }
+}
+
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function formatDate(s) {
+  const [y,m,d] = s.split('-');
+  const dow = ['日','月','火','水','木','金','土'][new Date(s).getDay()];
+  return `${y}年${parseInt(m)}月${parseInt(d)}日（${dow}）`;
+}
+function getReservation(date, slot) {
+  return reservations.find(r => String(r.date).substring(0,10) === date && String(r.slot).trim() === slot);
+}
+function slotLabel(slot) {
+  return slot === 'am' ? '午前' : slot === 'pm' ? '午後' : '終日';
+}
+function badgeClass(slot) {
+  return slot === 'am' ? 'badge-am' : slot === 'pm' ? 'badge-pm' : 'badge-all';
+}
+
+// ===== 日付・スロット選択 =====
+function selectDate(dateStr) {
+  selectedDate = dateStr;
+  selectedSlot = null;
+  document.getElementById('form-date-display').textContent = formatDate(dateStr);
+  ['btn-am','btn-pm','btn-all'].forEach(id => {
+    document.getElementById(id).classList.remove('selected','selected-all');
+  });
+
+  const allRes = getReservation(dateStr, 'all');
+  const amRes  = getReservation(dateStr, 'am');
+  const pmRes  = getReservation(dateStr, 'pm');
+
+  // ①終日が埋まっていれば午前・午後もdisabled、午前or午後が両方埋まっていれば終日もdisabled
+  const btnAm  = document.getElementById('btn-am');
+  const btnPm  = document.getElementById('btn-pm');
+  const btnAll = document.getElementById('btn-all');
+
+  btnAm.disabled  = !!(allRes || amRes);
+  btnPm.disabled  = !!(allRes || pmRes);
+  btnAll.disabled = !!(allRes || amRes || pmRes);
+
+  btnAm.innerHTML  = `<span class="slot-label">午前${(allRes||amRes)?' ✕':''}</span><span class="slot-time">09:00–12:30</span>`;
+  btnPm.innerHTML  = `<span class="slot-label">午後${(allRes||pmRes)?' ✕':''}</span><span class="slot-time">13:00–17:30</span>`;
+  btnAll.innerHTML = `<span class="slot-label">終日${(allRes||amRes||pmRes)?' ✕':''}</span><span class="slot-time">09:00–17:30</span>`;
+
+  updateSubmitBtn();
+  renderCalendar();
+}
+
+function selectSlot(slot) {
+  selectedSlot = slot;
+  ['btn-am','btn-pm','btn-all'].forEach(id => {
+    document.getElementById(id).classList.remove('selected','selected-all');
+  });
+  const cls = slot === 'all' ? 'selected-all' : 'selected';
+  document.getElementById('btn-' + slot).classList.add(cls);
+  updateSubmitBtn();
+}
+
+function updateSubmitBtn() {
+  document.getElementById('btn-reserve').disabled = !(selectedDate && selectedSlot);
+}
+
+// ===== 予約送信 =====
+async function submitReservation() {
+  const name = document.getElementById('input-name').value.trim();
+  if (!name)    { showToast('氏名を入力してください', 'error'); return; }
+  if (!selectedDate || !selectedSlot) { showToast('日付と時間帯を選択してください', 'error'); return; }
+
+  const btn = document.getElementById('btn-reserve');
+  btn.disabled = true; btn.textContent = '送信中...';
+
+  const payload = {
+    id: Date.now().toString(),
+    date: selectedDate,
+    slot: selectedSlot,
+    name,
+    dept:  document.getElementById('input-dept').value.trim(),
+    dest:  document.getElementById('input-dest').value.trim(),
+    note:  document.getElementById('input-note').value.trim(),
+    createdAt: new Date().toISOString()
+  };
+
+  try {
+    const result = await apiPost('addReservation', payload);
+    if (result.error) { showToast(result.error, 'error'); return; }
+    ['input-name','input-dept','input-dest','input-note'].forEach(id => document.getElementById(id).value = '');
+    selectedSlot = null;
+    await loadAll();
+    showToast('予約が完了しました ✓', 'success');
+  } catch(e) {
+    showToast('通信エラーが発生しました', 'error');
+  } finally {
+    btn.textContent = '予約を確定する';
+    updateSubmitBtn();
+  }
+}
+
+// ===== 予約一覧 =====
+function setFilter(f, btn) {
+  listFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderReservationList();
+}
+
+function renderReservationList() {
+  const container = document.getElementById('reservation-list');
+  const today = new Date(); today.setHours(0,0,0,0);
+  let list = [...reservations].sort((a,b) => a.date.localeCompare(b.date) || (a.slot==='am'?-1:1));
+  if (listFilter === 'upcoming') list = list.filter(r => new Date(r.date) >= today);
+  if (listFilter === 'past')     list = list.filter(r => new Date(r.date) <  today);
+
+  if (list.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">🚗</div><p>予約がありません</p></div>`;
+    return;
+  }
+  container.innerHTML = list.map(r => {
+    const ml = mileageRecords.find(m => String(m.resId) === String(r.id));
+    const mlText = ml ? `走行 ${Number(ml.end)-Number(ml.start)} km（${ml.start}→${ml.end}）` : '';
+    const coLabel = ml ? (ml.company === 'gomei' ? '<span class="co-badge co-gomei">合名</span>' : ml.company === 'kabushi' ? '<span class="co-badge co-kabushi">株式</span>' : '') : '';
+    const canCancel = new Date(r.date) > new Date(new Date().setDate(new Date().getDate()-1));
+    return `
+    <div class="reservation-item">
+      <span class="res-slot-badge ${badgeClass(r.slot)}">${slotLabel(r.slot)}</span>
+      <div class="res-info">
+        <div class="res-date">${formatDate(r.date)}</div>
+        <div class="res-name">${r.name}${r.dept?' ／ '+r.dept:''}${coLabel}</div>
+        <div class="res-sub">${r.dest?'行先：'+r.dest:''}</div>
+        ${r.note?`<div class="res-note">📝 ${r.note}</div>`:''}
+        ${mlText?`<div class="res-note" style="color:var(--green)">🔢 ${mlText}</div>`:''}
+      </div>
+      ${canCancel?`<button class="btn-cancel" onclick="cancelReservation('${r.id}')">取消</button>`:''}
+    </div>`;
+  }).join('');
+}
+
+async function cancelReservation(id) {
+  if (!confirm('この予約をキャンセルしますか？')) return;
+  try {
+    const result = await apiPost('cancelReservation', { id });
+    if (result.error) { showToast(result.error, 'error'); return; }
+    await loadAll();
+    showToast('予約をキャンセルしました');
+  } catch(e) { showToast('通信エラーが発生しました', 'error'); }
+}
+
+// ===== 走行距離（③会社選択） =====
+function selectMlCo(co) {
+  selectedMlCo = co;
+  document.getElementById('ml-btn-gomei').className   = 'co-btn' + (co === 'gomei'   ? ' selected-gomei'   : '');
+  document.getElementById('ml-btn-kabushi').className = 'co-btn' + (co === 'kabushi' ? ' selected-kabushi' : '');
+}
+
+function updateMileageDiff() {
+  const s = parseInt(document.getElementById('mileage-start').value);
+  const e = parseInt(document.getElementById('mileage-end').value);
+  const row = document.getElementById('mileage-diff-row');
+  if (!isNaN(s) && !isNaN(e) && e > s) {
+    document.getElementById('mileage-diff-val').textContent = (e - s).toLocaleString();
+    row.style.display = 'flex';
+  } else {
+    row.style.display = 'none';
+  }
+}
+
+async function saveMileage() {
+  const name = document.getElementById('ml-name').value.trim();
+  const date = document.getElementById('ml-date').value.trim();
+  if (!name)         { showToast('氏名を入力してください', 'error'); return; }
+  if (!date)         { showToast('利用日を入力してください', 'error'); return; }
+  if (!selectedMlCo) { showToast('利用会社を選択してください', 'error'); return; }
+  const s = parseInt(document.getElementById('mileage-start').value);
+  const e = parseInt(document.getElementById('mileage-end').value);
+  if (isNaN(s) || isNaN(e)) { showToast('メーター値を入力してください', 'error'); return; }
+  if (e <= s) { showToast('帰着時は出発時より大きい値を入力してください', 'error'); return; }
+
+  try {
+    const result = await apiPost('saveMileage', {
+      resId: `${date}_${name}_${Date.now()}`,
+      name, date,
+      company: selectedMlCo,
+      start: s, end: e,
+      savedAt: new Date().toISOString()
+    });
+    if (result.error) { showToast(result.error, 'error'); return; }
+    await loadAll();
+    // フォームリセット
+    document.getElementById('ml-name').value = '';
+    document.getElementById('ml-date').value = '';
+    document.getElementById('mileage-start').value = '';
+    document.getElementById('mileage-end').value = '';
+    document.getElementById('mileage-diff-row').style.display = 'none';
+    selectMlCo(null); selectedMlCo = null;
+    document.getElementById('ml-btn-gomei').className   = 'co-btn';
+    document.getElementById('ml-btn-kabushi').className = 'co-btn';
+    showToast('走行距離を保存しました ✓', 'success');
+  } catch(e) { showToast('通信エラーが発生しました', 'error'); }
+}
+
+function renderMileageList() {
+  const container = document.getElementById('mileage-list');
+  if (mileageRecords.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">🔢</div><p>記録がありません</p></div>`;
+    return;
+  }
+  const sorted = [...mileageRecords].sort((a,b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+  container.innerHTML = sorted.map(m => {
+    const dist = Number(m.end) - Number(m.start);
+    const coLabel = m.company === 'gomei' ? '<span class="co-badge co-gomei">合名</span>' :
+                    m.company === 'kabushi' ? '<span class="co-badge co-kabushi">株式</span>' : '';
+    return `<div class="reservation-item" style="margin-bottom:0">
+      <div class="res-info">
+        <div class="res-date">${m.date || ''}</div>
+        <div class="res-name">${m.name || ''}${coLabel}</div>
+        <div class="res-note" style="color:var(--green);font-family:'DM Mono',monospace">
+          ${Number(m.start).toLocaleString()} → ${Number(m.end).toLocaleString()} km（走行 ${dist.toLocaleString()} km）
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ===== CSV出力（④合名・株式別） =====
+function exportCSV() {
+  const rows = [['ID','日付','時間帯','氏名','部署','行先','備考','予約日時']];
+  [...reservations].sort((a,b) => a.date.localeCompare(b.date)).forEach(r => {
+    rows.push([r.id, r.date, slotLabel(r.slot), r.name, r.dept||'', r.dest||'', r.note||'', r.createdAt]);
+  });
+  downloadCSV(rows, '社用車予約一覧.csv');
+}
+
+function exportMileageCSV(filter) {
+  let list = [...mileageRecords];
+  if (filter === 'gomei')   list = list.filter(m => m.company === 'gomei');
+  if (filter === 'kabushi') list = list.filter(m => m.company === 'kabushi');
+  list.sort((a,b) => String(a.date).localeCompare(String(b.date)));
+
+  const label = filter === 'gomei' ? '合名会社' : filter === 'kabushi' ? '株式会社' : '全件';
+  const rows = [['利用日','氏名','利用会社','出発メーター(km)','帰着メーター(km)','走行距離(km)','記録日時']];
+  list.forEach(m => {
+    const coName = m.company === 'gomei' ? '合名会社' : m.company === 'kabushi' ? '株式会社' : '';
+    rows.push([m.date||'', m.name||'', coName, m.start, m.end, Number(m.end)-Number(m.start), m.savedAt]);
+  });
+  downloadCSV(rows, `走行距離記録_${label}.csv`);
+}
+
+function downloadCSV(rows, filename) {
+  const bom = '\uFEFF';
+  const csv = bom + rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ===== タブ =====
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+  if (id === 'mileage') renderMileageList();
+}
+
+// ===== トースト =====
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = type ? `show ${type}` : 'show';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = type; }, 3000);
+}
+
+init();
+</script>
+</body>
+</html>
