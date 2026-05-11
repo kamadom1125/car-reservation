@@ -1,0 +1,156 @@
+// ===================================
+// 社用車予約システム - GASスクリプト最終版
+// GitHub Pages + JSONP対応
+// ===================================
+const SHEET_ID = '1bteIeEv-Fvs1Rd9eCQ-9BG60u3i8sVw9GOxFv3SDuuY';
+const SHEET_RESERVATIONS = '予約データ';
+const SHEET_MILEAGE = '走行距離';
+
+// ===================================
+// GETリクエスト（JSONP対応）
+// ===================================
+function doGet(e) {
+  const callback = e.parameter.callback;
+  const action   = e.parameter.action;
+  const jsonp    = e.parameter.jsonp; // POSTデータをGETで受け取る場合
+
+  let result;
+  try {
+    if (jsonp) {
+      // apiPost からのリクエスト（GETに乗せたPOSTデータ）
+      const data = JSON.parse(decodeURIComponent(jsonp));
+      const a = data.action;
+      const payload = data.payload;
+      if (a === 'addReservation')         result = addReservation(payload);
+      else if (a === 'cancelReservation') result = cancelReservation(payload);
+      else if (a === 'saveMileage')       result = saveMileage(payload);
+      else result = { error: '不明なアクション' };
+    } else if (action === 'getReservations') {
+      result = getReservations();
+    } else if (action === 'getMileage') {
+      result = getMileage();
+    } else {
+      result = { error: '不明なアクション' };
+    }
+  } catch(err) {
+    result = { error: err.message };
+  }
+
+  // JSONP形式で返す
+  const json = JSON.stringify(result);
+  if (callback) {
+    return ContentService
+      .createTextOutput(callback + '(' + json + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService
+    .createTextOutput(json)
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ===================================
+// 予約データ取得
+// ===================================
+function getReservations() {
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_RESERVATIONS);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { reservations: [] };
+  const headers = rows[0];
+  const reservations = rows.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => {
+      if (h === 'date' && row[i]) {
+        const d = new Date(row[i]);
+        obj[h] = Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd');
+      } else {
+        obj[h] = row[i];
+      }
+    });
+    return obj;
+  });
+  return { reservations };
+}
+
+// ===================================
+// 予約追加（終日重複チェック付き）
+// ===================================
+function addReservation(payload) {
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_RESERVATIONS);
+  const rows = sheet.getDataRange().getValues();
+
+  if (rows.length > 1) {
+    const existing = rows.slice(1).filter(r => {
+      const d = new Date(r[1]);
+      const rDate = Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd');
+      return rDate === payload.date;
+    });
+    if (payload.slot === 'all' && existing.length > 0)
+      return { error: 'この日はすでに予約があるため終日予約できません' };
+    if (existing.some(r => r[2] === 'all'))
+      return { error: 'この日は終日予約済みのため予約できません' };
+    if (existing.some(r => r[2] === payload.slot))
+      return { error: 'この時間帯はすでに予約済みです' };
+  }
+
+  sheet.appendRow([
+    payload.id,
+    payload.date,
+    payload.slot,
+    payload.name,
+    payload.dept  || '',
+    payload.dest  || '',
+    payload.note  || '',
+    payload.createdAt
+  ]);
+  return { success: true };
+}
+
+// ===================================
+// 予約キャンセル（前日まで）
+// ===================================
+function cancelReservation(payload) {
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_RESERVATIONS);
+  const rows = sheet.getDataRange().getValues();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const rowIndex = rows.findIndex((r, i) => i > 0 && String(r[0]) === String(payload.id));
+  if (rowIndex === -1) return { error: '予約が見つかりません' };
+  const resDate = new Date(rows[rowIndex][1]);
+  if (resDate <= yesterday) return { error: '当日はキャンセルできません（前日まで）' };
+  sheet.deleteRow(rowIndex + 1);
+  return { success: true };
+}
+
+// ===================================
+// 走行距離取得
+// ===================================
+function getMileage() {
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_MILEAGE);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { mileage: [] };
+  const headers = rows[0];
+  const mileage = rows.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = row[i]; });
+    return obj;
+  });
+  return { mileage };
+}
+
+// ===================================
+// 走行距離保存
+// ===================================
+function saveMileage(payload) {
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_MILEAGE);
+  sheet.appendRow([
+    payload.resId,
+    payload.name    || '',
+    payload.date    || '',
+    payload.company || '',
+    payload.start,
+    payload.end,
+    payload.savedAt,
+    ''
+  ]);
+  return { success: true };
+}
